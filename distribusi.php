@@ -37,16 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_distribution']))
             $stokHari = getDailyStockRow($tanggal);
         }
 
-        $conn2 = dbConnect();
-        $sum = $conn2->query('SELECT COALESCE(SUM(jumlah_donat),0) AS total FROM distribusi_donat WHERE tanggal_distribusi = "' . $tanggal . '" AND status != "dibatalkan"')->fetch_assoc()['total'] ?? 0;
+        $sum = $conn->query('SELECT COALESCE(SUM(jumlah_donat),0) AS total FROM distribusi_donat WHERE tanggal_distribusi = "' . $tanggal . '" AND status != "dibatalkan"')->fetch_assoc()['total'] ?? 0;
         $stokTersedia = max(0, (int)$stokHari['stok_awal'] - (int)$sum);
 
         if ($jumlah > $stokTersedia) {
             $alert = 'Stok tidak cukup. Distribusi melebihi stok tersedia.';
         } else {
             $transaksiId = generateTransaksiId();
-            $stmt = $conn2->prepare('INSERT INTO distribusi_donat (transaksi_id, tanggal_distribusi, warung_id, sales_name, jumlah_donat, harga_jual, tanggal_batas_bs, catatan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->bind_param('ssississ', $transaksiId, $tanggal, $warungId, $salesName, $jumlah, $harga, $batas, $catatan);
+            $stmt = $conn->prepare('INSERT INTO distribusi_donat (transaksi_id, tanggal_distribusi, warung_id, sales_name, jumlah_donat, harga_jual, tanggal_batas_bs, catatan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->bind_param('sssisiss', $transaksiId, $tanggal, $warungId, $salesName, $jumlah, $harga, $batas, $catatan);
             if ($stmt->execute()) {
                 syncDailyStock($tanggal);
                 redirect('distribusi.php?success=1');
@@ -55,7 +54,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_distribution']))
             }
             $stmt->close();
         }
-        $conn2->close();
         $conn->close();
     }
 }
@@ -145,7 +143,7 @@ $distribusiList = getAllDistributions();
                     <?php foreach ($distribusiList as $row) : ?>
                         <tr>
                             <td><?= htmlspecialchars($row['transaksi_id']) ?></td>
-                            <td><?= htmlspecialchars($row['warung_nama']) ?></td>
+                            <td><?= htmlspecialchars($row['warung_nama'] ?? '-') ?></td>
                             <td><?= formatTanggal($row['tanggal_distribusi']) ?></td>
                             <td><?= (int)$row['jumlah_donat'] ?></td>
                             <td><?= htmlspecialchars($row['status']) ?></td>
@@ -155,6 +153,6 @@ $distribusiList = getAllDistributions();
             </table>
         </div>
     </main>
-    <?php include __DIR__ . '/includes/header.php'; ?>
+    <?php include __DIR__ . '/includes/footer.php'; ?>
 </body>
 </html>

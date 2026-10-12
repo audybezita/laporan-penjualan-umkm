@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-function dbConnect() {
+function dbConnect()
+{
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
     if ($conn->connect_error) {
         throw new RuntimeException('Koneksi database gagal: ' . $conn->connect_error);
@@ -10,23 +11,27 @@ function dbConnect() {
     return $conn;
 }
 
-function redirect(string $location): void {
+function redirect(string $location): void
+{
     header('Location: ' . $location);
     exit;
 }
 
-function formatRupiah($value): string {
+function formatRupiah($value): string
+{
     return 'Rp' . number_format((float)$value, 0, ',', '.');
 }
 
-function formatTanggal($date): string {
+function formatTanggal($date): string
+{
     if (empty($date)) {
         return '-';
     }
     return date('d M Y', strtotime($date));
 }
 
-function ensureDatabase(): void {
+function ensureDatabase(): void
+{
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS);
     if ($conn->connect_error) {
         throw new RuntimeException('Koneksi database server gagal: ' . $conn->connect_error);
@@ -122,7 +127,8 @@ function ensureDatabase(): void {
     $conn->close();
 }
 
-function loggedInUser(): ?array {
+function loggedInUser(): ?array
+{
     if (!isset($_SESSION['user_id'])) {
         return null;
     }
@@ -139,13 +145,15 @@ function loggedInUser(): ?array {
     return $user ?: null;
 }
 
-function requireLogin(): void {
+function requireLogin(): void
+{
     if (!loggedInUser()) {
         redirect('index.php');
     }
 }
 
-function authenticateUser(string $username, string $password): ?array {
+function authenticateUser(string $username, string $password): ?array
+{
     $conn = dbConnect();
     $stmt = $conn->prepare('SELECT id, username, password_hash, full_name, role FROM users WHERE username = ? AND active = 1 LIMIT 1');
     $stmt->bind_param('s', $username);
@@ -162,11 +170,13 @@ function authenticateUser(string $username, string $password): ?array {
     return $user;
 }
 
-function generateTransaksiId(): string {
+function generateTransaksiId(): string
+{
     return 'DN-' . date('YmdHis') . '-' . random_int(100, 999);
 }
 
-function getDailyStockRow(string $tanggal): ?array {
+function getDailyStockRow(string $tanggal): ?array
+{
     $conn = dbConnect();
     $stmt = $conn->prepare('SELECT * FROM stok_harian WHERE tanggal = ? LIMIT 1');
     $stmt->bind_param('s', $tanggal);
@@ -178,7 +188,8 @@ function getDailyStockRow(string $tanggal): ?array {
     return $data;
 }
 
-function upsertDailyStock(string $tanggal, int $stokAwal = DEFAULT_STOK_AWAL): void {
+function upsertDailyStock(string $tanggal, int $stokAwal = DEFAULT_STOK_AWAL): void
+{
     $conn = dbConnect();
     $existing = getDailyStockRow($tanggal);
 
@@ -198,7 +209,8 @@ function upsertDailyStock(string $tanggal, int $stokAwal = DEFAULT_STOK_AWAL): v
     $conn->close();
 }
 
-function syncDailyStock(string $tanggal): void {
+function syncDailyStock(string $tanggal): void
+{
     $conn = dbConnect();
     $stmt = $conn->prepare('SELECT COALESCE(SUM(jumlah_donat),0) AS total_dibagikan FROM distribusi_donat WHERE tanggal_distribusi = ? AND status != "dibatalkan"');
     $stmt->bind_param('s', $tanggal);
@@ -206,7 +218,7 @@ function syncDailyStock(string $tanggal): void {
     $dibagikan = $stmt->get_result()->fetch_assoc()['total_dibagikan'] ?? 0;
     $stmt->close();
 
-    $stmt = $conn->prepare('SELECT COALESCE(SUM(donat_terjual),0) AS total_terjual, COALESCE(SUM(bs),0) AS total_bs FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE d.tanggal_distribusi = ?');
+    $stmt = $conn->prepare('SELECT COALESCE(SUM(donat_terjual),0) AS total_terjual, COALESCE(SUM(bs),0) AS total_bs FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = ?');
     $stmt->bind_param('s', $tanggal);
     $stmt->execute();
     $penjualan = $stmt->get_result()->fetch_assoc();
@@ -227,7 +239,8 @@ function syncDailyStock(string $tanggal): void {
     $conn->close();
 }
 
-function getDashboardCards(): array {
+function getDashboardCards(): array
+{
     $conn = dbConnect();
     $today = date('Y-m-d');
 
@@ -241,7 +254,7 @@ function getDashboardCards(): array {
         'hilang' => "SELECT COALESCE(SUM(hp.hilang_rusak),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'penjualan' => "SELECT COALESCE(SUM(hp.total_penjualan),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'setoran' => "SELECT COALESCE(SUM(s.jumlah_setoran),0) AS total FROM setoran_sales s WHERE DATE(s.tanggal_setoran) = CURDATE()",
-        'belum_setor' => "SELECT COALESCE(SUM(hp.total_penjualan),0) - COALESCE(SUM(ts.total_setoran),0) AS total FROM hasil_penjualan hp LEFT JOIN (SELECT distribusi_id, SUM(jumlah_setoran) AS total_setoran FROM setoran_sales GROUP BY distribusi_id) ts ON ts.distribusi_id = hp.distribusi_id WHERE DATE(hp.tanggal_pemeriksaan) = CURDATE()",
+        'belum_setor' => "SELECT COALESCE(SUM(hp.total_penjualan),0) - COALESCE(SUM(ss.jumlah_setoran),0) AS total FROM hasil_penjualan hp LEFT JOIN setoran_sales ss ON ss.distribusi_id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'transaksi_pending' => "SELECT COUNT(*) AS total FROM distribusi_donat WHERE status = 'aktif'"
     ];
 
@@ -259,14 +272,13 @@ function getDashboardCards(): array {
     return $result;
 }
 
-function getDashboardChartData(): array {
+function getDashboardChartData(): array
+{
     $conn = dbConnect();
-    $days = [];
     $result = ['penjualan' => [], 'distribusi' => [], 'komposisi' => []];
 
     for ($i = 6; $i >= 0; $i--) {
         $date = date('Y-m-d', strtotime('-' . $i . ' days'));
-        $days[] = $date;
 
         $stmt = $conn->prepare('SELECT COALESCE(SUM(hp.total_penjualan),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = ?');
         $stmt->bind_param('s', $date);
@@ -302,7 +314,8 @@ function getDashboardChartData(): array {
     return $result;
 }
 
-function getWarungBySearch(string $keyword = ''): array {
+function getWarungBySearch(string $keyword = ''): array
+{
     $conn = dbConnect();
     $condition = '';
     if ($keyword !== '') {
@@ -323,11 +336,13 @@ function getWarungBySearch(string $keyword = ''): array {
     return $rows;
 }
 
-function getWarungList(): array {
+function getWarungList(): array
+{
     return getWarungBySearch();
 }
 
-function getActiveDistributionList(): array {
+function getActiveDistributionList(): array
+{
     $conn = dbConnect();
     $sql = 'SELECT d.*, w.nama AS warung_nama FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id WHERE d.status = "aktif" ORDER BY d.tanggal_distribusi DESC';
     $result = $conn->query($sql);
@@ -336,7 +351,8 @@ function getActiveDistributionList(): array {
     return $rows;
 }
 
-function getAllDistributions(): array {
+function getAllDistributions(): array
+{
     $conn = dbConnect();
     $sql = 'SELECT d.*, w.nama AS warung_nama FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id ORDER BY d.tanggal_distribusi DESC';
     $result = $conn->query($sql);
@@ -345,7 +361,8 @@ function getAllDistributions(): array {
     return $rows;
 }
 
-function getSetoranSummaryForDistribusi(int $distribusiId): array {
+function getSetoranSummaryForDistribusi(int $distribusiId): array
+{
     $conn = dbConnect();
     $sql = 'SELECT COALESCE(SUM(jumlah_setoran),0) AS total_setoran FROM setoran_sales WHERE distribusi_id = ?';
     $stmt = $conn->prepare($sql);
@@ -357,7 +374,8 @@ function getSetoranSummaryForDistribusi(int $distribusiId): array {
     return ['total_setoran' => (int)$total];
 }
 
-function getReportData(string $startDate, string $endDate): array {
+function getReportData(string $startDate, string $endDate): array
+{
     $conn = dbConnect();
     $sql = 'SELECT d.*, w.nama AS warung_nama,
             COALESCE((SELECT SUM(s.jumlah_setoran) FROM setoran_sales s WHERE s.distribusi_id = d.id),0) AS total_setoran,

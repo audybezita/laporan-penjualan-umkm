@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_setoran'])) {
 }
 
 $conn = dbConnect();
-$rows = $conn->query('SELECT d.id, d.transaksi_id, w.nama AS warung_nama, d.tanggal_distribusi, COALESCE((SELECT SUM(total_penjualan) FROM hasil_penjualan WHERE distribusi_id = d.id),0) AS total_penjualan, COALESCE((SELECT SUM(jumlah_setoran) FROM setoran_sales WHERE distribusi_id = d.id),0) AS total_setoran FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id ORDER BY d.tanggal_distribusi DESC')->fetch_all(MYSQLI_ASSOC);
+$rows = $conn->query('SELECT d.id, d.transaksi_id, w.nama AS warung_nama, d.tanggal_distribusi, COALESCE((SELECT SUM(total_penjualan) FROM hasil_penjualan WHERE distribusi_id = d.id),0) AS total_penjualan FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id ORDER BY d.tanggal_distribusi DESC')->fetch_all(MYSQLI_ASSOC);
 $conn->close();
 ?>
 <!DOCTYPE html>

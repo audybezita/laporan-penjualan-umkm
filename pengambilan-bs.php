@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_bs'])) {
                     <select name="distribusi_id" required>
                         <option value="">-- Pilih transaksi --</option>
                         <?php foreach ($distribusi as $row) : ?>
-                            <option value="<?= (int)$row['id'] ?>"><?= htmlspecialchars($row['transaksi_id']) ?> - <?= htmlspecialchars($row['warung_nama']) ?></option>
+                            <option value="<?= (int)$row['id'] ?>"><?= htmlspecialchars($row['transaksi_id']) ?> - <?= htmlspecialchars($row['warung_id']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

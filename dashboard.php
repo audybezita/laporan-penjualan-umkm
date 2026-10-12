@@ -30,55 +30,55 @@ $chartData = getDashboardChartData();
         <section class="stats-grid">
             <div class="stat-card">
                 <span>Stok awal hari ini</span>
-                <strong><?= $cards['stok_awal'] ?></strong>
+                <strong><?= $cards['stok_awal'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Total donat dibagikan</span>
-                <strong><?= $cards['dibagikan'] ?></strong>
+                <strong><?= $cards['dibagikan'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Stok tersedia</span>
-                <strong><?= $cards['stok_tersedia'] ?></strong>
+                <strong><?= $cards['stok_tersedia'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Donat di warung</span>
-                <strong><?= $cards['di_warung'] ?></strong>
+                <strong><?= $cards['di_warung'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Donat terjual</span>
-                <strong><?= $cards['terjual'] ?></strong>
+                <strong><?= $cards['terjual'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Total BS</span>
-                <strong><?= $cards['bs'] ?></strong>
+                <strong><?= $cards['bs'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Donat hilang/rusak</span>
-                <strong><?= $cards['hilang'] ?></strong>
+                <strong><?= $cards['hilang'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Hasil penjualan</span>
-                <strong><?= formatRupiah($cards['penjualan']) ?></strong>
+                <strong><?= formatRupiah($cards['penjualan'] ?? 0) ?></strong>
             </div>
             <div class="stat-card">
                 <span>Setoran diterima</span>
-                <strong><?= formatRupiah($cards['setoran']) ?></strong>
+                <strong><?= formatRupiah($cards['setoran'] ?? 0) ?></strong>
             </div>
             <div class="stat-card">
                 <span>Belum disetorkan</span>
-                <strong><?= formatRupiah($cards['belum_setor']) ?></strong>
+                <strong><?= formatRupiah($cards['belum_setor'] ?? 0) ?></strong>
             </div>
             <div class="stat-card">
                 <span>Warung baru</span>
-                <strong><?= $cards['warung_baru'] ?></strong>
+                <strong><?= $cards['warung_baru'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Warung aktif</span>
-                <strong><?= $cards['warung_aktif'] ?></strong>
+                <strong><?= $cards['warung_aktif'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
                 <span>Transaksi pending</span>
-                <strong><?= $cards['transaksi_pending'] ?></strong>
+                <strong><?= $cards['transaksi_pending'] ?? 0 ?></strong>
             </div>
         </section>
 
@@ -101,9 +101,9 @@ $chartData = getDashboardChartData();
     <?php include __DIR__ . '/includes/footer.php'; ?>
 
     <script>
-        const salesValues = <?= json_encode($chartData['penjualan']) ?>;
-        const distributionValues = <?= json_encode($chartData['distribusi']) ?>;
-        const compositionValues = <?= json_encode($chartData['komposisi']) ?>;
+        const salesValues = <?= json_encode($chartData['penjualan'] ?? []) ?>;
+        const distributionValues = <?= json_encode($chartData['distribusi'] ?? []) ?>;
+        const compositionValues = <?= json_encode($chartData['komposisi'] ?? []) ?>;
 
         new Chart(document.getElementById('salesChart'), {
             type: 'line',
@@ -143,7 +143,7 @@ $chartData = getDashboardChartData();
             data: {
                 labels: ['Terjual', 'BS', 'Hilang / Rusak'],
                 datasets: [{
-                    data: [compositionValues.terjual, compositionValues.bs, compositionValues.hilang],
+                    data: [compositionValues.terjual ?? 0, compositionValues.bs ?? 0, compositionValues.hilang ?? 0],
                     backgroundColor: ['#f7a900', '#7a3b14', '#d9d9d9']
                 }]
             },
