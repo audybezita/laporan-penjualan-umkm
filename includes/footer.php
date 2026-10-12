@@ -7,3 +7,5 @@ if (!isset($_SESSION['user_id'])) {
     <p>© <?= date('Y') ?> Donat NS - Sistem Informasi Laporan Penjualan</p>
 </footer>
 <script src="assets/js/app.js"></script>
+</body>
+</html>
