@@ -119,6 +119,44 @@ button, input, select, textarea {
     box-shadow: 0 12px 20px rgba(255, 189, 67, 0.18);
 }
 
+.badge-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.badge-status.normal {
+    background: #c8f7c8;
+    color: #2d5c2d;
+}
+
+.badge-status.warning {
+    background: #fffde6;
+    color: #553b00;
+}
+
+.badge-status.critical {
+    background: #fff0e6;
+    color: #7a3b14;
+}
+
+.badge-status.kadaluarsa {
+    background: #ffe6e6;
+    color: #8a2727;
+}
+
+.badge-status.aktif {
+    background: #c8f7c8;
+    color: #2d5c2d;
+}
+
+.badge-status.nonaktif {
+    background: #f0f0f0;
+    color: #666;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -161,6 +199,30 @@ button, input, select, textarea {
 .chart-card h3 {
     margin: 0 0 12px;
     color: #3a2d39;
+}
+
+.card h3 {
+    color: #3a2d39;
+    margin: 0 0 14px;
+    font-size: 1.1rem;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, #fff9e6, #fffde6);
+    border: 1px solid #ffd700;
+    color: #7a7000;
+    padding: 14px 16px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.alert-warning strong {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.alert-warning p {
+    margin: 0;
 }
 
 .auth-page {
@@ -210,7 +272,7 @@ button, input, select, textarea {
 }
 
 .filter-row {
-    grid-template-columns: repeat(2, minmax(200px, 1fr));
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
     align-items: end;
 }
 

@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/functions.php';
 requireLogin();
-
-session_destroy();
-redirect('index.php');
+if (isset($_GET['logout'])) {
+    session_destroy();
+    redirect('index.php');
+}
+?>
