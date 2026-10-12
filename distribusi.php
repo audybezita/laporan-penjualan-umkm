@@ -2,50 +2,39 @@
 require_once __DIR__ . '/functions.php';
 requireLogin();
 
-$warung = getWarungList();
+$salesList = getSalesList();
 $alert = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_distribution'])) {
     $tanggal = trim($_POST['tanggal_distribusi'] ?? '');
-    $warungId = (int)($_POST['warung_id'] ?? 0);
-    $namaBaru = trim($_POST['nama_warung_baru'] ?? '');
-    $salesName = trim($_POST['sales_name'] ?? '');
+    $salesId = (int)($_POST['sales_id'] ?? 0);
     $jumlah = max(0, (int)($_POST['jumlah_donat'] ?? 0));
     $harga = max(0, (int)($_POST['harga_jual'] ?? DEFAULT_HARGA_JUAL));
-    $batas = trim($_POST['tanggal_batas_bs'] ?? $tanggal);
     $catatan = trim($_POST['catatan'] ?? '');
 
     if ($tanggal === '') {
         $alert = 'Tanggal distribusi wajib diisi.';
-    } elseif ($warungId <= 0 && $namaBaru === '') {
-        $alert = 'Pilih warung lama atau isi nama warung baru.';
+    } elseif ($salesId <= 0) {
+        $alert = 'Pilih sales untuk distribusi.';
     } elseif ($jumlah <= 0) {
         $alert = 'Jumlah donat harus lebih dari 0.';
     } else {
         $conn = dbConnect();
-        if ($warungId <= 0) {
-            $stmt = $conn->prepare('INSERT INTO warung (nama, alamat, pemilik, telepon, catatan, status) VALUES (?, "", "", "", ?, "aktif")');
-            $stmt->bind_param('ss', $namaBaru, $catatan);
-            $stmt->execute();
-            $warungId = $conn->insert_id;
-            $stmt->close();
-        }
-
         $stokHari = getDailyStockRow($tanggal);
         if (!$stokHari) {
             upsertDailyStock($tanggal, DEFAULT_STOK_AWAL);
             $stokHari = getDailyStockRow($tanggal);
         }
 
-        $sum = $conn->query('SELECT COALESCE(SUM(jumlah_donat),0) AS total FROM distribusi_donat WHERE tanggal_distribusi = "' . $tanggal . '" AND status != "dibatalkan"')->fetch_assoc()['total'] ?? 0;
+        $sum = $conn->query('SELECT COALESCE(SUM(jumlah_donat),0) AS total FROM distribusi_donat WHERE tanggal_distribusi = "' . $conn->real_escape_string($tanggal) . '" AND status != "dibatalkan"')->fetch_assoc()['total'] ?? 0;
         $stokTersedia = max(0, (int)$stokHari['stok_awal'] - (int)$sum);
 
         if ($jumlah > $stokTersedia) {
-            $alert = 'Stok tidak cukup. Distribusi melebihi stok tersedia.';
+            $alert = 'Stok tidak cukup. Tersedia hanya ' . $stokTersedia . ' donat.';
         } else {
             $transaksiId = generateTransaksiId();
-            $stmt = $conn->prepare('INSERT INTO distribusi_donat (transaksi_id, tanggal_distribusi, warung_id, sales_name, jumlah_donat, harga_jual, tanggal_batas_bs, catatan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->bind_param('sssisiss', $transaksiId, $tanggal, $warungId, $salesName, $jumlah, $harga, $batas, $catatan);
+            $stmt = $conn->prepare('INSERT INTO distribusi_donat (transaksi_id, tanggal_distribusi, sales_id, jumlah_donat, harga_jual, catatan) VALUES (?, ?, ?, ?, ?, ?)');
+            $stmt->bind_param('sssiss', $transaksiId, $tanggal, $salesId, $jumlah, $harga, $catatan);
             if ($stmt->execute()) {
                 syncDailyStock($tanggal);
                 redirect('distribusi.php?success=1');
@@ -74,7 +63,7 @@ $distribusiList = getAllDistributions();
         <div class="page-header">
             <div>
                 <h1>Distribusi Donat</h1>
-                <p>Catat distribusi ke warung lama maupun baru</p>
+                <p>Catat distribusi donat kepada sales</p>
             </div>
         </div>
 
@@ -83,44 +72,32 @@ $distribusiList = getAllDistributions();
         <?php endif; ?>
 
         <div class="card">
-            <h3>Form Distribusi</h3>
+            <h3>Form Distribusi Baru</h3>
             <form method="POST" class="two-col">
                 <div class="field">
-                    <label>Tanggal distribusi</label>
+                    <label>Tanggal Distribusi</label>
                     <input type="date" name="tanggal_distribusi" value="<?= date('Y-m-d') ?>" required>
                 </div>
                 <div class="field">
-                    <label>Nama sales</label>
-                    <input type="text" name="sales_name" placeholder="Opsional">
-                </div>
-                <div class="field">
-                    <label>Pilih warung lama</label>
-                    <select name="warung_id">
-                        <option value="0">-- Pilih warung --</option>
-                        <?php foreach ($warung as $item) : ?>
+                    <label>Pilih Sales</label>
+                    <select name="sales_id" required>
+                        <option value="0">-- Pilih sales --</option>
+                        <?php foreach ($salesList as $item) : ?>
                             <option value="<?= (int)$item['id'] ?>"><?= htmlspecialchars($item['nama']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="field">
-                    <label>Warung baru (opsional)</label>
-                    <input type="text" name="nama_warung_baru" placeholder="Isi jika warung belum ada">
-                </div>
-                <div class="field">
-                    <label>Jumlah donat</label>
+                    <label>Jumlah Donat</label>
                     <input type="number" name="jumlah_donat" min="1" required>
                 </div>
                 <div class="field">
-                    <label>Harga jual / biji</label>
+                    <label>Harga Jual / Biji</label>
                     <input type="number" name="harga_jual" min="1" value="1500" required>
-                </div>
-                <div class="field">
-                    <label>Batas BS</label>
-                    <input type="date" name="tanggal_batas_bs" value="<?= date('Y-m-d', strtotime('+6 days')) ?>" required>
                 </div>
                 <div class="field field-full">
                     <label>Catatan</label>
-                    <textarea name="catatan"></textarea>
+                    <textarea name="catatan" placeholder="Opsional"></textarea>
                 </div>
                 <div class="field-full">
                     <button type="submit" name="save_distribution" class="btn btn-primary">Simpan Distribusi</button>
@@ -129,26 +106,35 @@ $distribusiList = getAllDistributions();
         </div>
 
         <div class="card table-wrap">
+            <h3>Riwayat Distribusi</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Warung</th>
+                        <th>ID Transaksi</th>
+                        <th>Sales</th>
                         <th>Tanggal</th>
                         <th>Jumlah</th>
+                        <th>Umur (Hari)</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($distribusiList as $row) : ?>
-                        <tr>
-                            <td><?= htmlspecialchars($row['transaksi_id']) ?></td>
-                            <td><?= htmlspecialchars($row['warung_nama'] ?? '-') ?></td>
-                            <td><?= formatTanggal($row['tanggal_distribusi']) ?></td>
-                            <td><?= (int)$row['jumlah_donat'] ?></td>
-                            <td><?= htmlspecialchars($row['status']) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
+                    <?php if (empty($distribusiList)) : ?>
+                        <tr><td colspan="6" style="text-align:center; padding:20px; color:#999;">Belum ada distribusi.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($distribusiList as $row) : ?>
+                            <?php $umur = getUmurDonat($row['tanggal_distribusi']); ?>
+                            <?php $statusUmur = getStatusUmurDonat($row['tanggal_distribusi']); ?>
+                            <tr style="background: <?php if ($statusUmur === 'Kadaluarsa') echo '#ffe6e6'; elseif ($statusUmur === 'Critical') echo '#fff0e6'; elseif ($statusUmur === 'Warning') echo '#fffde6'; ?>">
+                                <td><strong><?= htmlspecialchars($row['transaksi_id']) ?></strong></td>
+                                <td><?= htmlspecialchars($row['sales_nama']) ?></td>
+                                <td><?= formatTanggal($row['tanggal_distribusi']) ?></td>
+                                <td><?= (int)$row['jumlah_donat'] ?></td>
+                                <td><strong><?= $umur ?> hari</strong></td>
+                                <td><span class="badge-status <?= strtolower($statusUmur) ?>"><?= $statusUmur ?></span></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>

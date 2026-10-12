@@ -30,6 +30,27 @@ function formatTanggal($date): string
     return date('d M Y', strtotime($date));
 }
 
+function getUmurDonat($tanggalDistribusi): int
+{
+    $today = new DateTime(date('Y-m-d'));
+    $distribusiDate = new DateTime($tanggalDistribusi);
+    $interval = $today->diff($distribusiDate);
+    return $interval->days;
+}
+
+function getStatusUmurDonat($tanggalDistribusi): string
+{
+    $umur = getUmurDonat($tanggalDistribusi);
+    if ($umur >= BATAS_UMUR_DONAT) {
+        return 'Kadaluarsa';
+    } elseif ($umur >= BATAS_UMUR_DONAT - 2) {
+        return 'Critical';
+    } elseif ($umur >= BATAS_UMUR_DONAT - 4) {
+        return 'Warning';
+    }
+    return 'Normal';
+}
+
 function ensureDatabase(): void
 {
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS);
@@ -50,15 +71,14 @@ function ensureDatabase(): void
             active TINYINT(1) DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )",
-        "CREATE TABLE IF NOT EXISTS warung (
+        "CREATE TABLE IF NOT EXISTS sales (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            nama VARCHAR(150) NOT NULL,
-            alamat VARCHAR(255) DEFAULT NULL,
-            pemilik VARCHAR(150) DEFAULT NULL,
-            telepon VARCHAR(50) DEFAULT NULL,
+            nama VARCHAR(150) NOT NULL UNIQUE,
+            telepon VARCHAR(20) DEFAULT NULL,
+            alamat TEXT DEFAULT NULL,
             catatan TEXT DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status ENUM('aktif','nonaktif') DEFAULT 'aktif'
+            status ENUM('aktif','nonaktif') DEFAULT 'aktif',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )",
         "CREATE TABLE IF NOT EXISTS stok_harian (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -66,7 +86,6 @@ function ensureDatabase(): void
             stok_awal INT NOT NULL DEFAULT 0,
             total_dibagikan INT NOT NULL DEFAULT 0,
             stok_tersedia INT NOT NULL DEFAULT 0,
-            donat_di_warung INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uniq_tanggal (tanggal)
@@ -75,15 +94,16 @@ function ensureDatabase(): void
             id INT AUTO_INCREMENT PRIMARY KEY,
             transaksi_id VARCHAR(50) NOT NULL UNIQUE,
             tanggal_distribusi DATE NOT NULL,
-            warung_id INT NOT NULL,
-            sales_name VARCHAR(150) DEFAULT NULL,
+            sales_id INT NOT NULL,
             jumlah_donat INT NOT NULL,
             harga_jual INT NOT NULL DEFAULT 1500,
-            tanggal_batas_bs DATE NOT NULL,
             catatan TEXT DEFAULT NULL,
             status ENUM('aktif','selesai','dibatalkan') DEFAULT 'aktif',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (warung_id) REFERENCES warung(id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_tanggal (tanggal_distribusi),
+            KEY idx_sales (sales_id),
+            FOREIGN KEY (sales_id) REFERENCES sales(id)
         )",
         "CREATE TABLE IF NOT EXISTS hasil_penjualan (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -97,17 +117,18 @@ function ensureDatabase(): void
             status ENUM('selesai','pending') DEFAULT 'selesai',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_distribusi (distribusi_id),
             FOREIGN KEY (distribusi_id) REFERENCES distribusi_donat(id)
         )",
         "CREATE TABLE IF NOT EXISTS setoran_sales (
             id INT AUTO_INCREMENT PRIMARY KEY,
             distribusi_id INT NOT NULL,
             tanggal_setoran DATE NOT NULL,
-            nama_sales VARCHAR(150) DEFAULT NULL,
             jumlah_setoran BIGINT NOT NULL DEFAULT 0,
             metode_pembayaran VARCHAR(100) DEFAULT 'tunai',
             catatan TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_distribusi (distribusi_id),
             FOREIGN KEY (distribusi_id) REFERENCES distribusi_donat(id)
         )"
     ];
@@ -122,6 +143,12 @@ function ensureDatabase(): void
     $checkUser = $conn->query("SELECT id FROM users WHERE username = 'admin' LIMIT 1");
     if ($checkUser->num_rows === 0) {
         $conn->query("INSERT INTO users (username, password_hash, full_name, role) VALUES ('admin', '$passwordHash', 'Pemilik Donat NS', 'admin')");
+    }
+
+    $checkSales = $conn->query("SELECT id FROM sales LIMIT 1");
+    if ($checkSales->num_rows === 0) {
+        $conn->query("INSERT INTO sales (nama, telepon, status) VALUES ('Sales 1', '081234567890', 'aktif')");
+        $conn->query("INSERT INTO sales (nama, telepon, status) VALUES ('Sales 2', '082345678901', 'aktif')");
     }
 
     $conn->close();
@@ -200,7 +227,7 @@ function upsertDailyStock(string $tanggal, int $stokAwal = DEFAULT_STOK_AWAL): v
         $stmt->execute();
         $stmt->close();
     } else {
-        $stmt = $conn->prepare('INSERT INTO stok_harian (tanggal, stok_awal, total_dibagikan, stok_tersedia, donat_di_warung) VALUES (?, ?, 0, ?, 0)');
+        $stmt = $conn->prepare('INSERT INTO stok_harian (tanggal, stok_awal, total_dibagikan, stok_tersedia) VALUES (?, ?, 0, ?)');
         $stmt->bind_param('sii', $tanggal, $stokAwal, $stokAwal);
         $stmt->execute();
         $stmt->close();
@@ -218,22 +245,12 @@ function syncDailyStock(string $tanggal): void
     $dibagikan = $stmt->get_result()->fetch_assoc()['total_dibagikan'] ?? 0;
     $stmt->close();
 
-    $stmt = $conn->prepare('SELECT COALESCE(SUM(donat_terjual),0) AS total_terjual, COALESCE(SUM(bs),0) AS total_bs FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = ?');
-    $stmt->bind_param('s', $tanggal);
-    $stmt->execute();
-    $penjualan = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    $totalTerjual = (int)($penjualan['total_terjual'] ?? 0);
-    $totalBs = (int)($penjualan['total_bs'] ?? 0);
-
     $row = getDailyStockRow($tanggal);
     $stokAwal = $row['stok_awal'] ?? DEFAULT_STOK_AWAL;
     $stokTersedia = max(0, $stokAwal - (int)$dibagikan);
-    $diWarung = max(0, (int)$dibagikan - $totalTerjual - $totalBs);
 
-    $stmt = $conn->prepare('UPDATE stok_harian SET total_dibagikan = ?, stok_tersedia = ?, donat_di_warung = ?, updated_at = NOW() WHERE tanggal = ?');
-    $stmt->bind_param('iiis', $dibagikan, $stokTersedia, $diWarung, $tanggal);
+    $stmt = $conn->prepare('UPDATE stok_harian SET total_dibagikan = ?, stok_tersedia = ?, updated_at = NOW() WHERE tanggal = ?');
+    $stmt->bind_param('iiis', $dibagikan, $stokTersedia, $stokTersedia, $tanggal);
     $stmt->execute();
     $stmt->close();
     $conn->close();
@@ -245,17 +262,14 @@ function getDashboardCards(): array
     $today = date('Y-m-d');
 
     $queries = [
-        'warung_baru' => "SELECT COUNT(*) AS total FROM warung WHERE DATE(created_at) = CURDATE()",
-        'warung_aktif' => "SELECT COUNT(*) AS total FROM warung WHERE status = 'aktif'",
+        'sales_aktif' => "SELECT COUNT(*) AS total FROM sales WHERE status = 'aktif'",
         'stok_awal' => "SELECT COALESCE(stok_awal, 0) AS total FROM stok_harian WHERE tanggal = CURDATE() LIMIT 1",
         'dibagikan' => "SELECT COALESCE(SUM(jumlah_donat),0) AS total FROM distribusi_donat WHERE DATE(tanggal_distribusi) = CURDATE() AND status != 'dibatalkan'",
         'terjual' => "SELECT COALESCE(SUM(hp.donat_terjual),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'bs' => "SELECT COALESCE(SUM(hp.bs),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
-        'hilang' => "SELECT COALESCE(SUM(hp.hilang_rusak),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'penjualan' => "SELECT COALESCE(SUM(hp.total_penjualan),0) AS total FROM hasil_penjualan hp JOIN distribusi_donat d ON d.id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
         'setoran' => "SELECT COALESCE(SUM(s.jumlah_setoran),0) AS total FROM setoran_sales s WHERE DATE(s.tanggal_setoran) = CURDATE()",
-        'belum_setor' => "SELECT COALESCE(SUM(hp.total_penjualan),0) - COALESCE(SUM(ss.jumlah_setoran),0) AS total FROM hasil_penjualan hp LEFT JOIN setoran_sales ss ON ss.distribusi_id = hp.distribusi_id WHERE DATE(d.tanggal_distribusi) = CURDATE()",
-        'transaksi_pending' => "SELECT COUNT(*) AS total FROM distribusi_donat WHERE status = 'aktif'"
+        'transaksi_aktif' => "SELECT COUNT(*) AS total FROM distribusi_donat WHERE status = 'aktif'"
     ];
 
     $result = [];
@@ -266,7 +280,6 @@ function getDashboardCards(): array
 
     $row = getDailyStockRow($today);
     $result['stok_tersedia'] = (int)($row['stok_tersedia'] ?? DEFAULT_STOK_AWAL);
-    $result['di_warung'] = (int)($row['donat_di_warung'] ?? 0);
     $conn->close();
 
     return $result;
@@ -314,37 +327,20 @@ function getDashboardChartData(): array
     return $result;
 }
 
-function getWarungBySearch(string $keyword = ''): array
+function getSalesList(): array
 {
     $conn = dbConnect();
-    $condition = '';
-    if ($keyword !== '') {
-        $condition = ' WHERE nama LIKE ? ';
-    }
-
-    $sql = 'SELECT * FROM warung ' . $condition . ' ORDER BY created_at DESC';
-    $stmt = $conn->prepare($sql);
-    if ($keyword !== '') {
-        $like = '%' . $keyword . '%';
-        $stmt->bind_param('s', $like);
-    }
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $rows = $result->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
+    $sql = 'SELECT * FROM sales WHERE status = "aktif" ORDER BY nama ASC';
+    $result = $conn->query($sql);
+    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $conn->close();
     return $rows;
 }
 
-function getWarungList(): array
-{
-    return getWarungBySearch();
-}
-
-function getActiveDistributionList(): array
+function getActiveDistributions(): array
 {
     $conn = dbConnect();
-    $sql = 'SELECT d.*, w.nama AS warung_nama FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id WHERE d.status = "aktif" ORDER BY d.tanggal_distribusi DESC';
+    $sql = 'SELECT d.*, s.nama AS sales_nama FROM distribusi_donat d JOIN sales s ON s.id = d.sales_id WHERE d.status = "aktif" ORDER BY d.tanggal_distribusi DESC';
     $result = $conn->query($sql);
     $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $conn->close();
@@ -354,36 +350,23 @@ function getActiveDistributionList(): array
 function getAllDistributions(): array
 {
     $conn = dbConnect();
-    $sql = 'SELECT d.*, w.nama AS warung_nama FROM distribusi_donat d JOIN warung w ON w.id = d.warung_id ORDER BY d.tanggal_distribusi DESC';
+    $sql = 'SELECT d.*, s.nama AS sales_nama FROM distribusi_donat d JOIN sales s ON s.id = d.sales_id ORDER BY d.tanggal_distribusi DESC';
     $result = $conn->query($sql);
     $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $conn->close();
     return $rows;
 }
 
-function getSetoranSummaryForDistribusi(int $distribusiId): array
-{
-    $conn = dbConnect();
-    $sql = 'SELECT COALESCE(SUM(jumlah_setoran),0) AS total_setoran FROM setoran_sales WHERE distribusi_id = ?';
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param('i', $distribusiId);
-    $stmt->execute();
-    $total = $stmt->get_result()->fetch_assoc()['total_setoran'] ?? 0;
-    $stmt->close();
-    $conn->close();
-    return ['total_setoran' => (int)$total];
-}
-
 function getReportData(string $startDate, string $endDate): array
 {
     $conn = dbConnect();
-    $sql = 'SELECT d.*, w.nama AS warung_nama,
-            COALESCE((SELECT SUM(s.jumlah_setoran) FROM setoran_sales s WHERE s.distribusi_id = d.id),0) AS total_setoran,
+    $sql = 'SELECT d.*, s.nama AS sales_nama,
+            COALESCE((SELECT SUM(ss.jumlah_setoran) FROM setoran_sales ss WHERE ss.distribusi_id = d.id),0) AS total_setoran,
             COALESCE((SELECT SUM(hp.donat_terjual) FROM hasil_penjualan hp WHERE hp.distribusi_id = d.id),0) AS total_terjual,
             COALESCE((SELECT SUM(hp.bs) FROM hasil_penjualan hp WHERE hp.distribusi_id = d.id),0) AS total_bs,
             COALESCE((SELECT SUM(hp.hilang_rusak) FROM hasil_penjualan hp WHERE hp.distribusi_id = d.id),0) AS total_hilang
             FROM distribusi_donat d
-            JOIN warung w ON w.id = d.warung_id
+            JOIN sales s ON s.id = d.sales_id
             WHERE d.tanggal_distribusi BETWEEN ? AND ?
             ORDER BY d.tanggal_distribusi DESC';
     $stmt = $conn->prepare($sql);
@@ -391,6 +374,16 @@ function getReportData(string $startDate, string $endDate): array
     $stmt->execute();
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
+    $conn->close();
+    return $rows;
+}
+
+function getDistributionWarning(): array
+{
+    $conn = dbConnect();
+    $sql = 'SELECT d.*, s.nama AS sales_nama FROM distribusi_donat d JOIN sales s ON s.id = d.sales_id WHERE d.status = "aktif" AND DATEDIFF(CURDATE(), d.tanggal_distribusi) >= ' . (BATAS_UMUR_DONAT - 2) . ' ORDER BY d.tanggal_distribusi ASC';
+    $result = $conn->query($sql);
+    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
     $conn->close();
     return $rows;
 }

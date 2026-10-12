@@ -20,13 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_stock'])) {
         $check->close();
 
         if ($hasRow) {
-            $stmt = $conn->prepare('UPDATE stok_harian SET stok_awal = ?, updated_at = NOW() WHERE tanggal = ?');
-            $stmt->bind_param('is', $stokAwal, $tanggal);
+            $stmt = $conn->prepare('UPDATE stok_harian SET stok_awal = ?, stok_tersedia = ?, updated_at = NOW() WHERE tanggal = ?');
+            $stmt->bind_param('iis', $stokAwal, $stokAwal, $tanggal);
             $stmt->execute();
             $stmt->close();
         } else {
-            $stmt = $conn->prepare('INSERT INTO stok_harian (tanggal, stok_awal, total_dibagikan, stok_tersedia, donat_di_warung) VALUES (?, ?, 0, ?, 0)');
-            $stmt->bind_param('si', $tanggal, $stokAwal, $stokAwal);
+            $stmt = $conn->prepare('INSERT INTO stok_harian (tanggal, stok_awal, total_dibagikan, stok_tersedia) VALUES (?, ?, 0, ?)');
+            $stmt->bind_param('sii', $tanggal, $stokAwal, $stokAwal);
             $stmt->execute();
             $stmt->close();
         }
@@ -48,8 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_stock'])) {
     <main class="page-wrap">
         <div class="page-header">
             <div>
-                <h1>Stok Donat</h1>
-                <p>Catat stok awal harian dan riwayat stok</p>
+                <h1>Stok Donat Harian</h1>
+                <p>Catat stok awal donat dan riwayat stok harian</p>
             </div>
         </div>
 
@@ -58,23 +58,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_stock'])) {
         <?php endif; ?>
 
         <div class="card">
-            <h3>Catat Stok Harian</h3>
+            <h3>Input Stok Harian</h3>
             <form method="POST" class="two-col">
                 <div class="field">
                     <label>Tanggal</label>
                     <input type="date" name="tanggal" value="<?= date('Y-m-d') ?>" required>
                 </div>
                 <div class="field">
-                    <label>Stok awal</label>
+                    <label>Stok Awal (biji)</label>
                     <input type="number" name="stok_awal" value="400" min="0" required>
                 </div>
                 <div class="field-full">
-                    <button type="submit" name="save_stock" class="btn btn-primary">Simpan</button>
+                    <button type="submit" name="save_stock" class="btn btn-primary">Simpan Stok</button>
                 </div>
             </form>
         </div>
 
         <div class="card table-wrap">
+            <h3>Riwayat Stok 30 Hari Terakhir</h3>
             <table>
                 <thead>
                     <tr>
@@ -82,20 +83,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_stock'])) {
                         <th>Stok Awal</th>
                         <th>Total Dibagikan</th>
                         <th>Stok Tersedia</th>
-                        <th>Donat di Warung</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($stockRows)) : ?>
-                        <tr><td colspan="5">Belum ada stok harian.</td></tr>
+                        <tr><td colspan="4" style="text-align:center; padding:20px; color:#999;">Belum ada stok harian.</td></tr>
                     <?php else: ?>
                         <?php foreach ($stockRows as $row) : ?>
                             <tr>
                                 <td><?= htmlspecialchars($row['tanggal']) ?></td>
                                 <td><?= (int)$row['stok_awal'] ?></td>
                                 <td><?= (int)$row['total_dibagikan'] ?></td>
-                                <td><?= (int)$row['stok_tersedia'] ?></td>
-                                <td><?= (int)$row['donat_di_warung'] ?></td>
+                                <td><strong><?= (int)$row['stok_tersedia'] ?></strong></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

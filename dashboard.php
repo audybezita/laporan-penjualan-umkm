@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/functions.php';
 requireLogin();
-$user = loggedInUser();
 
+$user = loggedInUser();
 $cards = getDashboardCards();
 $chartData = getDashboardChartData();
+$distributionWarning = getDistributionWarning();
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -27,78 +28,69 @@ $chartData = getDashboardChartData();
             <div class="badge">Welcome, <?= htmlspecialchars($user['full_name']) ?></div>
         </div>
 
+        <?php if (!empty($distributionWarning)): ?>
+            <div class="alert-warning">
+                <strong>⚠️ Peringatan: Donat Mendekati Batas Umur</strong>
+                <p><?= count($distributionWarning) ?> transaksi donat akan kadaluarsa dalam 2 hari ke depan. Segera lakukan pengambilan BS.</p>
+            </div>
+        <?php endif; ?>
+
         <section class="stats-grid">
             <div class="stat-card">
-                <span>Stok awal hari ini</span>
+                <span>Stok Awal Hari Ini</span>
                 <strong><?= $cards['stok_awal'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Total donat dibagikan</span>
+                <span>Donat Dibagikan</span>
                 <strong><?= $cards['dibagikan'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Stok tersedia</span>
+                <span>Stok Tersedia</span>
                 <strong><?= $cards['stok_tersedia'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Donat di warung</span>
-                <strong><?= $cards['di_warung'] ?? 0 ?></strong>
-            </div>
-            <div class="stat-card">
-                <span>Donat terjual</span>
+                <span>Donat Terjual</span>
                 <strong><?= $cards['terjual'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Total BS</span>
+                <span>BS Dikembalikan</span>
                 <strong><?= $cards['bs'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Donat hilang/rusak</span>
-                <strong><?= $cards['hilang'] ?? 0 ?></strong>
-            </div>
-            <div class="stat-card">
-                <span>Hasil penjualan</span>
+                <span>Total Penjualan</span>
                 <strong><?= formatRupiah($cards['penjualan'] ?? 0) ?></strong>
             </div>
             <div class="stat-card">
-                <span>Setoran diterima</span>
+                <span>Setoran Diterima</span>
                 <strong><?= formatRupiah($cards['setoran'] ?? 0) ?></strong>
             </div>
             <div class="stat-card">
-                <span>Belum disetorkan</span>
-                <strong><?= formatRupiah($cards['belum_setor'] ?? 0) ?></strong>
+                <span>Sales Aktif</span>
+                <strong><?= $cards['sales_aktif'] ?? 0 ?></strong>
             </div>
             <div class="stat-card">
-                <span>Warung baru</span>
-                <strong><?= $cards['warung_baru'] ?? 0 ?></strong>
-            </div>
-            <div class="stat-card">
-                <span>Warung aktif</span>
-                <strong><?= $cards['warung_aktif'] ?? 0 ?></strong>
-            </div>
-            <div class="stat-card">
-                <span>Transaksi pending</span>
-                <strong><?= $cards['transaksi_pending'] ?? 0 ?></strong>
+                <span>Transaksi Aktif</span>
+                <strong><?= $cards['transaksi_aktif'] ?? 0 ?></strong>
             </div>
         </section>
 
         <section class="chart-grid">
             <div class="card chart-card">
-                <h3>Grafik hasil penjualan</h3>
+                <h3>Grafik Hasil Penjualan 7 Hari</h3>
                 <canvas id="salesChart"></canvas>
             </div>
             <div class="card chart-card">
-                <h3>Grafik distribusi donat</h3>
+                <h3>Grafik Distribusi Donat</h3>
                 <canvas id="distributionChart"></canvas>
             </div>
             <div class="card chart-card">
-                <h3>Komposisi hasil pemeriksaan</h3>
+                <h3>Komposisi Hasil Pemeriksaan</h3>
                 <canvas id="compositionChart"></canvas>
             </div>
         </section>
     </main>
 
-    <?php include __DIR__ . '/includes/footer.php'; ?>
+    <?php include __DIR__ . '/includes/footer.php';
 
     <script>
         const salesValues = <?= json_encode($chartData['penjualan'] ?? []) ?>;
@@ -116,13 +108,14 @@ $chartData = getDashboardChartData();
                 datasets: [{
                     label: 'Hasil penjualan',
                     data: salesValues,
-                    borderColor: '#f7a900',
-                    backgroundColor: 'rgba(247,169,0,0.15)',
-                    tension: 0.3,
+                    borderColor: '#ff7eb3',
+                    backgroundColor: 'rgba(255, 126, 179, 0.1)',
+                    tension: 0.4,
                     fill: true,
+                    borderWidth: 3
                 }]
             },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: true }
         });
 
         new Chart(document.getElementById('distributionChart'), {
@@ -130,12 +123,12 @@ $chartData = getDashboardChartData();
             data: {
                 labels: distributionValues.map(item => item.date),
                 datasets: [
-                    { label: 'Dibagikan', data: distributionValues.map(item => item.dibagikan), backgroundColor: '#7a3b14' },
-                    { label: 'Terjual', data: distributionValues.map(item => item.terjual), backgroundColor: '#f7a900' },
-                    { label: 'BS', data: distributionValues.map(item => item.bs), backgroundColor: '#8d6e63' }
+                    { label: 'Dibagikan', data: distributionValues.map(item => item.dibagikan), backgroundColor: '#a0d8ff' },
+                    { label: 'Terjual', data: distributionValues.map(item => item.terjual), backgroundColor: '#7ec8ff' },
+                    { label: 'BS', data: distributionValues.map(item => item.bs), backgroundColor: '#ff9fd6' }
                 ]
             },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: true }
         });
 
         new Chart(document.getElementById('compositionChart'), {
@@ -144,10 +137,10 @@ $chartData = getDashboardChartData();
                 labels: ['Terjual', 'BS', 'Hilang / Rusak'],
                 datasets: [{
                     data: [compositionValues.terjual ?? 0, compositionValues.bs ?? 0, compositionValues.hilang ?? 0],
-                    backgroundColor: ['#f7a900', '#7a3b14', '#d9d9d9']
+                    backgroundColor: ['#7ec8ff', '#ff7eb3', '#ffb5c9']
                 }]
             },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: true }
         });
     </script>
 </body>
